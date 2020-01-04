@@ -31,15 +31,16 @@ def parse_args():
     parser.add_argument('--crop_height', type=int, help="crop height", default=240)
     parser.add_argument('--crop_width', type=int, help="crop width", default=624)
     parser.add_argument('--max_disp', type=int, default=192, help="max disp")
-    parser.add_argument('--resume', type=str, default='', help="resume from saved model")
+    parser.add_argument('--resume', type=str, default='../sceneflow_epoch_10.pth', help="resume from saved model")
     parser.add_argument('--cuda', type=bool, default=True, help='use cuda?')
-    parser.add_argument('--data_path', type=str, required=True, help="data root")
+    parser.add_argument('--data_path', type=str, help="data root", default='../CV_finalproject/data')
     parser.add_argument('--save_path', type=str, default='./result/', help="location to save result")
     parser.add_argument('--threshold', type=float, default=3.0, help="threshold of error rates")
     parser.add_argument('--multi_gpu', type=int, default=0, help="multi_gpu choice")
     parser.add_argument(
         '--policy', type=str, default='cropping',
         choices=['cropping', 'directly_resize', 'resize_to_slide'])
+    parser.add_argument('--sliding_window_overlap', type=int, default=30)
 
     opt = parser.parse_args()
     return opt
@@ -124,11 +125,17 @@ def test_transform(temp_data, crop_height, crop_width):
         start_y = int((h - crop_height) / 2)
         # print(start_x, start_y)
         temp_data = temp_data[:, start_y: start_y + crop_height, start_x: start_x + crop_width]
+
+    left, right = split_left_right(temp_data, crop_height, crop_width)
+    return left, right, h, w
+
+
+def split_left_right(temp_data, crop_height, crop_width):
     left = np.ones([1, 3, crop_height, crop_width], 'float32')
     left[0, :, :, :] = temp_data[0: 3, :, :]
     right = np.ones([1, 3, crop_height, crop_width], 'float32')
     right[0, :, :, :] = temp_data[3: 6, :, :]
-    return torch.from_numpy(left).float(), torch.from_numpy(right).float(), h, w
+    return torch.from_numpy(left).float(), torch.from_numpy(right).float()
 
 
 def load_data(leftname, rightname, opt):
@@ -144,7 +151,6 @@ def load_data(leftname, rightname, opt):
         out_height = int(height * (out_width / width))
         left = left.resize((out_width, out_height))
         right = right.resize((out_width, out_height))
-        breakpoint()
 
     size = np.shape(left)
     height = size[0]
@@ -168,15 +174,47 @@ def load_data(leftname, rightname, opt):
     return temp_data
 
 
+def slide_h(img, window_size: int, overlapping_h: int):
+    c, h, w = np.shape(img)
+    step_size = window_size - overlapping_h
+    total_steps = int(np.ceil((h - window_size) / step_size))
+    required_h = int(total_steps * step_size + window_size)
+
+    padded_h = required_h - h
+    img = np.pad(img, ((0, 0), (0, padded_h), (0, 0)), mode='constant', constant_values=0)
+    imgs = [
+        img[:, i * step_size: i * step_size + window_size, :]
+        for i in range(total_steps + 1)
+    ]
+    return imgs, padded_h
+
+
+def deslide_h(imgs, window_size: int, overlapping_h: int, padded_h: int, ensemble='overlap'):
+    total_steps, h, w = np.shape(imgs)
+    step_size = window_size - overlapping_h
+
+    total_h = (total_steps - 1) * step_size + window_size
+    out = np.zeros([total_h, w])
+    for i in range(total_steps):
+        out[i * step_size: i * step_size + window_size, :] = imgs[i]
+    return out[: total_h - padded_h, :]
+
+
 def test(opt, leftname, rightname, model, cuda):
     datas = load_data(leftname, rightname, opt)
 
-    if opt.policy != 'resize_to_slide':
+    if opt.policy == 'resize_to_slide':
+        slided_datas, padded_h = slide_h(datas, opt.crop_height, opt.sliding_window_overlap)
+        input1, input2 = zip(*[
+            split_left_right(window, opt.crop_height, opt.crop_width)
+            for window in slided_datas
+        ])
+        input1 = torch.stack(input1, axis=0).squeeze(axis=1)
+        input2 = torch.stack(input2, axis=0).squeeze(axis=1)
+    else:
         input1, input2, height, width = test_transform(datas, opt.crop_height, opt.crop_width)
         input1 = Variable(input1, requires_grad=False)
         input2 = Variable(input2, requires_grad=False)
-    else:
-        raise NotImplementedError
 
     model.eval()
     if cuda:
@@ -186,11 +224,14 @@ def test(opt, leftname, rightname, model, cuda):
         prediction = model(input1, input2)
 
     output = prediction.cpu().detach().numpy()
-    if height <= opt.crop_height and width <= opt.crop_width:
-        output = output[0, opt.crop_height - height: opt.crop_height, opt.crop_width - width: opt.crop_width]
+    if opt.policy == 'resize_to_slide':
+        output = deslide_h(output, opt.crop_height, opt.sliding_window_overlap, padded_h)
     else:
-        raise ValueError
-        output = output[0, :, :]
+        if height <= opt.crop_height and width <= opt.crop_width:
+            output = output[0, opt.crop_height - height: opt.crop_height, opt.crop_width - width: opt.crop_width]
+        else:
+            raise ValueError
+            output = output[0, :, :]
 
     return output
 
@@ -229,6 +270,11 @@ def main():
             prediction = cv2.resize(prediction, (our_width, our_height))
             prediction /= (opt.crop_width / our_width)
             print(f"Pridction shape after resize back: {prediction.shape}")
+        elif opt.policy == 'resize_to_slide':
+            h, w = prediction.shape
+            assert abs(h / our_height - w / our_width) < 1e-5
+            prediction = cv2.resize(prediction, (our_width, our_height))
+            prediction /= (h / our_height)
 
         print(f"Saving prediction to {pred_out_path}")
         skimage.io.imsave(pred_out_path, (prediction * 256).astype('uint16'))
