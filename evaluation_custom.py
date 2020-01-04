@@ -28,8 +28,8 @@ from models.GANet_deep import GANet
 
 def parse_args():
     parser = argparse.ArgumentParser(description='PyTorch GANet Example')
-    parser.add_argument('--crop_height', type=int, required=True, help="crop height")
-    parser.add_argument('--crop_width', type=int, required=True, help="crop width")
+    parser.add_argument('--crop_height', type=int, help="crop height", default=240)
+    parser.add_argument('--crop_width', type=int, help="crop width", default=624)
     parser.add_argument('--max_disp', type=int, default=192, help="max disp")
     parser.add_argument('--resume', type=str, default='', help="resume from saved model")
     parser.add_argument('--cuda', type=bool, default=True, help='use cuda?')
@@ -37,7 +37,9 @@ def parse_args():
     parser.add_argument('--save_path', type=str, default='./result/', help="location to save result")
     parser.add_argument('--threshold', type=float, default=3.0, help="threshold of error rates")
     parser.add_argument('--multi_gpu', type=int, default=0, help="multi_gpu choice")
-    parser.add_argument('--resize_before_feed_data', action='store_true')
+    parser.add_argument(
+        '--policy', type=str, default='cropping',
+        choices=['cropping', 'directly_resize', 'resize_to_slide'])
 
     opt = parser.parse_args()
     return opt
@@ -133,9 +135,16 @@ def load_data(leftname, rightname, opt):
     left = Image.open(leftname)
     right = Image.open(rightname)
     # temp crop size
-    if opt.resize_before_feed_data:
+    if opt.policy == 'directly_resize':
         left = left.resize((opt.crop_width, opt.crop_height))
         right = right.resize((opt.crop_width, opt.crop_height))
+    elif opt.policy == 'resize_to_slide':
+        out_width = opt.crop_width
+        height, width = np.shape(left)[:2]
+        out_height = int(height * (out_width / width))
+        left = left.resize((out_width, out_height))
+        right = right.resize((out_width, out_height))
+        breakpoint()
 
     size = np.shape(left)
     height = size[0]
@@ -160,9 +169,14 @@ def load_data(leftname, rightname, opt):
 
 
 def test(opt, leftname, rightname, model, cuda):
-    input1, input2, height, width = test_transform(load_data(leftname, rightname, opt), opt.crop_height, opt.crop_width)
-    input1 = Variable(input1, requires_grad=False)
-    input2 = Variable(input2, requires_grad=False)
+    datas = load_data(leftname, rightname, opt)
+
+    if opt.policy != 'resize_to_slide':
+        input1, input2, height, width = test_transform(datas, opt.crop_height, opt.crop_width)
+        input1 = Variable(input1, requires_grad=False)
+        input2 = Variable(input2, requires_grad=False)
+    else:
+        raise NotImplementedError
 
     model.eval()
     if cuda:
@@ -171,14 +185,14 @@ def test(opt, leftname, rightname, model, cuda):
     with torch.no_grad():
         prediction = model(input1, input2)
 
-    temp = prediction.cpu()
-    temp = temp.detach().numpy()
+    output = prediction.cpu().detach().numpy()
     if height <= opt.crop_height and width <= opt.crop_width:
-        temp = temp[0, opt.crop_height - height: opt.crop_height, opt.crop_width - width: opt.crop_width]
+        output = output[0, opt.crop_height - height: opt.crop_height, opt.crop_width - width: opt.crop_width]
     else:
-        temp = temp[0, :, :]
+        raise ValueError
+        output = output[0, :, :]
 
-    return temp
+    return output
 
 
 def main():
@@ -211,7 +225,7 @@ def main():
 
         # Resize and rescale predicted disparity map
         print(f"Pridction shape: {prediction.shape}")
-        if opt.resize_before_feed_data:
+        if opt.policy == 'directly_resize':
             prediction = cv2.resize(prediction, (our_width, our_height))
             prediction /= (opt.crop_width / our_width)
             print(f"Pridction shape after resize back: {prediction.shape}")
