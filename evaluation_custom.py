@@ -181,7 +181,8 @@ def test(opt, leftname, rightname, model, cuda):
 
 def main():
     opt = parse_args()
-    os.makedirs(opt.save_path, exist_ok=True)
+    os.makedirs(op.join(opt.save_path, 'pred'), exist_ok=True)
+    os.makedirs(op.join(opt.save_path, 'gt'), exist_ok=True)
     print(opt)
 
     model, cuda = build_env(opt)
@@ -195,17 +196,25 @@ def main():
         rightname = op.join(opt.data_path, 'Synthetic', ('TR%d.png' % index))
         gt_disp_path = op.join(opt.data_path, 'Synthetic', ('TLD%d.pfm' % index))
 
-        pred_disp_path = op.join(opt.save_path, f'{str(index)}.png')
+        pred_out_path = op.join(opt.save_path, 'pred', f'{str(index)}.png')
+        gt_viewable_path = op.join(opt.save_path, 'gt', f'{str(index)}.png')
+
+        # Read ground truth PFM and save it as png
         disp, our_height, our_width = readPFM(gt_disp_path)
+        print(f"Saving ground truth image (as a viewable file) into: {gt_viewable_path}")
+        skimage.io.imsave(gt_viewable_path, (disp * 256).astype('uint16'))
         print(f"Ground truth max disparity: {disp.max(): .4f}")
 
         prediction = test(opt, leftname, rightname, model, cuda)
         prediction = cv2.resize(prediction, (our_width, our_height))
-        skimage.io.imsave(pred_disp_path, (prediction * 256).astype('uint16'))
 
+        # Resize and rescale predicted disparity map
         print(f"Pridction shape: {prediction.shape}")
         prediction = cv2.resize(prediction, (our_width, our_height))
         prediction /= (opt.crop_width / our_width)
+
+        print(f"Saving prediction to {pred_out_path}")
+        skimage.io.imsave(pred_out_path, (prediction * 256).astype('uint16'))
 
         mask = np.logical_and(disp >= 0.001, disp <= opt.max_disp)
 
