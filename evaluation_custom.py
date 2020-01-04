@@ -1,15 +1,19 @@
 from __future__ import print_function
 import argparse
+import sys
+# import shutil
+import os
+import os.path as op
+import re
+from struct import unpack
+# from math import log10
+
+# from dataloader.data import get_test_set
 import skimage
 import skimage.io
 import skimage.transform
 from PIL import Image
-# from math import log10
-import sys
-# import shutil
-import os
-import re
-from struct import unpack
+import numpy as np
 import torch
 # import torch.nn as nn
 import torch.nn.parallel
@@ -17,11 +21,9 @@ import torch.nn.parallel
 # import torch.optim as optim
 from torch.autograd import Variable
 # from torch.utils.data import DataLoader
-from models.GANet_deep import GANet
-
-# from dataloader.data import get_test_set
-import numpy as np
 import cv2
+
+from models.GANet_deep import GANet
 
 
 def parse_args():
@@ -37,8 +39,6 @@ def parse_args():
     parser.add_argument('--multi_gpu', type=int, default=0, help="multi_gpu choice")
 
     opt = parser.parse_args()
-
-    print(opt)
     return opt
 
 # print('===> Loading datasets')
@@ -181,27 +181,29 @@ def test(opt, leftname, rightname, model, cuda):
 
 def main():
     opt = parse_args()
-    model, cuda = build_env(opt)
     os.makedirs(opt.save_path, exist_ok=True)
-    # file_path = opt.data_path
+    print(opt)
+
+    model, cuda = build_env(opt)
+
     dataset_len = 10
     avg_error = 0
     avg_rate = 0
 
     for index in range(dataset_len):
-        leftname = opt.data_path + 'Synthetic/' + ('TL%d.png' % index)
-        rightname = opt.data_path + 'Synthetic/' + ('TR%d.png' % index)
-        dispname = opt.data_path + 'Synthetic/' + ('TLD%d.pfm' % index)
+        leftname = op.join(opt.data_path, 'Synthetic', ('TL%d.png' % index))
+        rightname = op.join(opt.data_path, 'Synthetic', ('TR%d.png' % index))
+        gt_disp_path = op.join(opt.data_path, 'Synthetic', ('TLD%d.pfm' % index))
 
-        savename = opt.save_path + str(index) + '.png'
-        disp, our_height, our_width = readPFM(dispname)
+        pred_disp_path = op.join(opt.save_path, f'{str(index)}.png')
+        disp, our_height, our_width = readPFM(gt_disp_path)
         print(f"Ground truth max disparity: {disp.max(): .4f}")
 
         prediction = test(opt, leftname, rightname, model, cuda)
         prediction = cv2.resize(prediction, (our_width, our_height))
-        skimage.io.imsave(savename, (prediction * 256).astype('uint16'))
+        skimage.io.imsave(pred_disp_path, (prediction * 256).astype('uint16'))
 
-        print(prediction.shape)
+        print(f"Pridction shape: {prediction.shape}")
         prediction = cv2.resize(prediction, (our_width, our_height))
         prediction /= (opt.crop_width / our_width)
 
