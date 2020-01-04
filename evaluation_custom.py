@@ -98,12 +98,13 @@ def readPFM(file):
         img = np.reshape(img, (height, width))
         img = np.flipud(img)
         # cv2.imwrite('./result/xxxx.png', img)
-        # print(img.max())
+        print(img.max())
     return img, height, width
 
 def test_transform(temp_data, crop_height, crop_width):
     _, h, w=np.shape(temp_data)
 
+    print(h, w, crop_height, crop_width)
     # print(temp_data.shape)
     if h <= crop_height and w <= crop_width:
         temp = temp_data
@@ -190,6 +191,7 @@ if __name__ == "__main__":
         prediction = test(leftname, rightname, savename)
         print(prediction.shape)
         prediction = cv2.resize(prediction, (384,512))
+        prediction /= (624 / 384)
 
         mask = np.logical_and(disp >= 0.001, disp <= opt.max_disp)
 
