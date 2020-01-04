@@ -37,6 +37,7 @@ def parse_args():
     parser.add_argument('--save_path', type=str, default='./result/', help="location to save result")
     parser.add_argument('--threshold', type=float, default=3.0, help="threshold of error rates")
     parser.add_argument('--multi_gpu', type=int, default=0, help="multi_gpu choice")
+    parser.add_argument('--resize_before_feed_data', action='store_true')
 
     opt = parser.parse_args()
     return opt
@@ -111,12 +112,12 @@ def readPFM(file):
 def test_transform(temp_data, crop_height, crop_width):
     _, h, w = np.shape(temp_data)
 
-    # print(temp_data.shape)
     if h <= crop_height and w <= crop_width:
         temp = temp_data
         temp_data = np.zeros([6, crop_height, crop_width], 'float32')
         temp_data[:, crop_height - h: crop_height, crop_width - w: crop_width] = temp
     else:
+        raise ValueError
         start_x = int((w - crop_width) / 2)
         start_y = int((h - crop_height) / 2)
         # print(start_x, start_y)
@@ -132,8 +133,9 @@ def load_data(leftname, rightname, opt):
     left = Image.open(leftname)
     right = Image.open(rightname)
     # temp crop size
-    left = left.resize((opt.crop_width, opt.crop_height))
-    right = right.resize((opt.crop_width, opt.crop_height))
+    if opt.resize_before_feed_data:
+        left = left.resize((opt.crop_width, opt.crop_height))
+        right = right.resize((opt.crop_width, opt.crop_height))
 
     size = np.shape(left)
     height = size[0]
@@ -206,20 +208,19 @@ def main():
         print(f"Ground truth max disparity: {disp.max(): .4f}")
 
         prediction = test(opt, leftname, rightname, model, cuda)
-        prediction = cv2.resize(prediction, (our_width, our_height))
 
         # Resize and rescale predicted disparity map
         print(f"Pridction shape: {prediction.shape}")
-        prediction = cv2.resize(prediction, (our_width, our_height))
-        prediction /= (opt.crop_width / our_width)
+        if opt.resize_before_feed_data:
+            prediction = cv2.resize(prediction, (our_width, our_height))
+            prediction /= (opt.crop_width / our_width)
+            print(f"Pridction shape after resize back: {prediction.shape}")
 
         print(f"Saving prediction to {pred_out_path}")
         skimage.io.imsave(pred_out_path, (prediction * 256).astype('uint16'))
 
-        mask = np.logical_and(disp >= 0.001, disp <= opt.max_disp)
-
-        error = np.mean(np.abs(prediction[mask] - disp[mask]))
-        rate = np.sum(np.abs(prediction[mask] - disp[mask]) > opt.threshold) / np.sum(mask)
+        error = np.mean(np.abs(prediction - disp))
+        rate = np.mean(np.abs(prediction - disp) > opt.threshold)
         avg_error += error
         avg_rate += rate
         print("===> Frame {}: ".format(index) + " ==> EPE Error: {:.4f}, Error Rate: {:.4f}".format(error, rate))
