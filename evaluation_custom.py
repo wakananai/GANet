@@ -23,26 +23,23 @@ from models.GANet_deep import GANet
 import numpy as np
 import cv2
 
-parser = argparse.ArgumentParser(description='PyTorch GANet Example')
-parser.add_argument('--crop_height', type=int, required=True, help="crop height")
-parser.add_argument('--crop_width', type=int, required=True, help="crop width")
-parser.add_argument('--max_disp', type=int, default=192, help="max disp")
-parser.add_argument('--resume', type=str, default='', help="resume from saved model")
-parser.add_argument('--cuda', type=bool, default=True, help='use cuda?')
-parser.add_argument('--data_path', type=str, required=True, help="data root")
-parser.add_argument('--save_path', type=str, default='./result/', help="location to save result")
-parser.add_argument('--threshold', type=float, default=3.0, help="threshold of error rates")
-parser.add_argument('--multi_gpu', type=int, default=0, help="multi_gpu choice")
 
-opt = parser.parse_args()
+def parse_args():
+    parser = argparse.ArgumentParser(description='PyTorch GANet Example')
+    parser.add_argument('--crop_height', type=int, required=True, help="crop height")
+    parser.add_argument('--crop_width', type=int, required=True, help="crop width")
+    parser.add_argument('--max_disp', type=int, default=192, help="max disp")
+    parser.add_argument('--resume', type=str, default='', help="resume from saved model")
+    parser.add_argument('--cuda', type=bool, default=True, help='use cuda?')
+    parser.add_argument('--data_path', type=str, required=True, help="data root")
+    parser.add_argument('--save_path', type=str, default='./result/', help="location to save result")
+    parser.add_argument('--threshold', type=float, default=3.0, help="threshold of error rates")
+    parser.add_argument('--multi_gpu', type=int, default=0, help="multi_gpu choice")
 
+    opt = parser.parse_args()
 
-print(opt)
-
-cuda = opt.cuda
-# cuda = True
-if cuda and not torch.cuda.is_available():
-    raise Exception("No GPU found, please run without --cuda")
+    print(opt)
+    return opt
 
 # print('===> Loading datasets')
 # test_set = get_test_set(opt.data_path, opt.test_list, [opt.crop_height, opt.crop_width],
@@ -50,20 +47,28 @@ if cuda and not torch.cuda.is_available():
 # testing_data_loader = DataLoader(dataset=test_set, num_workers=opt.threads,
 #                                  batch_size=opt.testBatchSize, shuffle=False)
 
-print('===> Building model')
-model = GANet(opt.max_disp)
 
-if cuda:
-    model = torch.nn.DataParallel(model).cuda()
+def build_env(opt):
+    cuda = opt.cuda
+    # cuda = True
+    if cuda and not torch.cuda.is_available():
+        raise Exception("No GPU found, please run without --cuda")
 
-if opt.resume:
-    if os.path.isfile(opt.resume):
-        print("=> loading checkpoint '{}'".format(opt.resume))
-        checkpoint = torch.load(opt.resume)
-        model.load_state_dict(checkpoint['state_dict'], strict=False)
+    print('===> Building model')
+    model = GANet(opt.max_disp)
 
-    else:
-        print("=> no checkpoint found at '{}'".format(opt.resume))
+    if cuda:
+        model = torch.nn.DataParallel(model).cuda()
+
+    if opt.resume:
+        if os.path.isfile(opt.resume):
+            print("=> loading checkpoint '{}'".format(opt.resume))
+            checkpoint = torch.load(opt.resume)
+            model.load_state_dict(checkpoint['state_dict'], strict=False)
+
+        else:
+            print("=> no checkpoint found at '{}'".format(opt.resume))
+    return model, cuda
 
 
 def readPFM(file):
@@ -100,14 +105,12 @@ def readPFM(file):
         img = np.reshape(img, (height, width))
         img = np.flipud(img)
         # cv2.imwrite('./result/xxxx.png', img)
-        print(f"Ground truth max disparity: {img.max()}")
     return img, height, width
 
 
 def test_transform(temp_data, crop_height, crop_width):
     _, h, w = np.shape(temp_data)
 
-    print(h, w, crop_height, crop_width)
     # print(temp_data.shape)
     if h <= crop_height and w <= crop_width:
         temp = temp_data
@@ -125,12 +128,12 @@ def test_transform(temp_data, crop_height, crop_width):
     return torch.from_numpy(left).float(), torch.from_numpy(right).float(), h, w
 
 
-def load_data(leftname, rightname):
+def load_data(leftname, rightname, opt):
     left = Image.open(leftname)
     right = Image.open(rightname)
     # temp crop size
-    left = left.resize((624, 240))
-    right = right.resize((624, 240))
+    left = left.resize((opt.crop_width, opt.crop_height))
+    right = right.resize((opt.crop_width, opt.crop_height))
 
     size = np.shape(left)
     height = size[0]
@@ -154,8 +157,8 @@ def load_data(leftname, rightname):
     return temp_data
 
 
-def test(leftname, rightname, savename):
-    input1, input2, height, width = test_transform(load_data(leftname, rightname), opt.crop_height, opt.crop_width)
+def test(opt, leftname, rightname, model, cuda):
+    input1, input2, height, width = test_transform(load_data(leftname, rightname, opt), opt.crop_height, opt.crop_width)
     input1 = Variable(input1, requires_grad=False)
     input2 = Variable(input2, requires_grad=False)
 
@@ -173,14 +176,14 @@ def test(leftname, rightname, savename):
     else:
         temp = temp[0, :, :]
 
-    temp = cv2.resize(temp, (384, 512))
-    skimage.io.imsave(savename, (temp * 256).astype('uint16'))
-
     return temp
 
 
-if __name__ == "__main__":
-    file_path = opt.data_path
+def main():
+    opt = parse_args()
+    model, cuda = build_env(opt)
+    os.makedirs(opt.save_path, exist_ok=True)
+    # file_path = opt.data_path
     dataset_len = 10
     avg_error = 0
     avg_rate = 0
@@ -191,12 +194,16 @@ if __name__ == "__main__":
         dispname = opt.data_path + 'Synthetic/' + ('TLD%d.pfm' % index)
 
         savename = opt.save_path + str(index) + '.png'
-        disp, height, width = readPFM(dispname)
+        disp, our_height, our_width = readPFM(dispname)
+        print(f"Ground truth max disparity: {disp.max(): .4f}")
 
-        prediction = test(leftname, rightname, savename)
+        prediction = test(opt, leftname, rightname, model, cuda)
+        prediction = cv2.resize(prediction, (our_width, our_height))
+        skimage.io.imsave(savename, (prediction * 256).astype('uint16'))
+
         print(prediction.shape)
-        prediction = cv2.resize(prediction, (384, 512))
-        prediction /= (624 / 384)
+        prediction = cv2.resize(prediction, (our_width, our_height))
+        prediction /= (opt.crop_width / our_width)
 
         mask = np.logical_and(disp >= 0.001, disp <= opt.max_disp)
 
@@ -209,3 +216,7 @@ if __name__ == "__main__":
     avg_rate = avg_rate / dataset_len
     print("===> Total {} Frames ==> AVG EPE Error: {:.4f}, AVG Error Rate: {:.4f}".format(
         dataset_len, avg_error, avg_rate))
+
+
+if __name__ == "__main__":
+    main()
