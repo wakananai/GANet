@@ -21,6 +21,7 @@ from models.GANet_deep import GANet
 
 #from dataloader.data import get_test_set
 import numpy as np
+import cv2
 
 parser = argparse.ArgumentParser(description='PyTorch GANet Example')
 parser.add_argument('--crop_height', type=int, required=True, help="crop height")
@@ -96,11 +97,14 @@ def readPFM(file):
         img = unpack(fmt, buffer)
         img = np.reshape(img, (height, width))
         img = np.flipud(img)
+        # cv2.imwrite('./result/xxxx.png', img)
+        # print(img.max())
     return img, height, width
 
 def test_transform(temp_data, crop_height, crop_width):
     _, h, w=np.shape(temp_data)
 
+    # print(temp_data.shape)
     if h <= crop_height and w <= crop_width:
         temp = temp_data
         temp_data = np.zeros([6, crop_height, crop_width], 'float32')
@@ -108,6 +112,7 @@ def test_transform(temp_data, crop_height, crop_width):
     else:
         start_x = int((w - crop_width) / 2)
         start_y = int((h - crop_height) / 2)
+        # print(start_x, start_y)
         temp_data = temp_data[:, start_y: start_y + crop_height, start_x: start_x + crop_width]
     left = np.ones([1, 3,crop_height,crop_width],'float32')
     left[0, :, :, :] = temp_data[0: 3, :, :]
@@ -118,6 +123,10 @@ def test_transform(temp_data, crop_height, crop_width):
 def load_data(leftname, rightname):
     left = Image.open(leftname)
     right = Image.open(rightname)
+    # temp crop size
+    left = left.resize((624,240))
+    right = right.resize((624,240))
+
     size = np.shape(left)
     height = size[0]
     width = size[1]
@@ -157,7 +166,10 @@ def test(leftname, rightname, savename):
         temp = temp[0, opt.crop_height - height: opt.crop_height, opt.crop_width - width: opt.crop_width]
     else:
         temp = temp[0, :, :]
+
+    temp = cv2.resize(temp, (384,512))
     skimage.io.imsave(savename, (temp * 256).astype('uint16'))
+
     return temp
 
 
@@ -176,6 +188,9 @@ if __name__ == "__main__":
         disp, height, width = readPFM(dispname)
 
         prediction = test(leftname, rightname, savename)
+        print(prediction.shape)
+        prediction = cv2.resize(prediction, (384,512))
+
         mask = np.logical_and(disp >= 0.001, disp <= opt.max_disp)
 
         error = np.mean(np.abs(prediction[mask] - disp[mask]))
