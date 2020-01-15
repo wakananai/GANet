@@ -3,6 +3,7 @@ import os
 import skimage.color as color
 import matplotlib.pyplot as plt
 import scipy.ndimage.interpolation as sni
+os.environ["GLOG_minloglevel"] = "1"
 import caffe
 from colorization_extract import config
 import cv2
@@ -10,7 +11,7 @@ import cv2
 # need to download model via
 # ./models/fetch_release_models.sh
 
-def gray2color(img_in_array, gpu_id=1):
+def gray2color(img_in_array, gpu_id=0):
 
     caffe.set_mode_gpu()
     caffe.set_device(gpu_id)
