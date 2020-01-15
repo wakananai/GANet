@@ -36,7 +36,7 @@ def build_env():
     model = GANet(opt.max_disp)
 
     if cuda:
-        model = torch.nn.DataParallel(model).cuda()
+        model = model.cuda()
 
     if opt.resume:
         if os.path.isfile(opt.resume):
@@ -210,7 +210,7 @@ def test(leftarray, rightarray, model, cuda):
     return output
 
 
-def eval(leftarray, rightarray):
+def evaluate(leftarray, rightarray):
     model, cuda = build_env()
     prediction = test(leftarray, rightarray, model, cuda)
     # Resize and rescale predicted disparity map

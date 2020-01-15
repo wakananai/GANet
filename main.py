@@ -3,6 +3,8 @@ import argparse
 import cv2
 import time
 from util import writePFM
+from evaluation_custom import evaluate
+from colorization_extract.colorize_func import gray2color
 
 parser = argparse.ArgumentParser(description='Disparity Estimation')
 parser.add_argument('--input-left', default='./data/Synthetic/TL0.png', type=str, help='input left image')
@@ -10,19 +12,27 @@ parser.add_argument('--input-right', default='./data/Synthetic/TR0.png', type=st
 parser.add_argument('--output', default='./TL0.pfm', type=str, help='left disparity map')
 
 
+def isGray(Il, Ir):
+    return ((Il[:,:,0] == Il[:,:,1]) & (Il[:,:,1] == Il[:,:,2])).all() 
+
 # You can modify the function interface as you like
 def computeDisp(Il, Ir):
-
-    if len(Il.shape) == 3 and Il.shape[2] > 1:
+    print(Il.shape)
+    if not isGray(Il, Ir):
+        # transfer to RGB
+        Il = Il[:,:,::-1]
+        Ir = Ir[:,:,::-1]
         # This is rgb image
-        h, w, ch = Il.shape
         # Apply GANet
-        disp = np.zeros((h, w), dtype=np.int32)
+        disp = evaluate(Il, Ir).astype(np.int32)
     else:
-        # This is gray scale image
+        # This is gray scale image(input 3 channel R==G==B)
         # Apply colorization
+        Il = gray2color(Il)
+        Ir = gray2color(Ir)
         # Apply GANet
-        pass
+        disp = evaluate(Il, Ir).astype(np.int32)
+
     return disp.astype(np.float32)
 
 
