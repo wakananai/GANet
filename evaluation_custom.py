@@ -36,13 +36,13 @@ def build_env():
     model = GANet(opt.max_disp)
 
     if cuda:
-        model = model.cuda()
+        model = torch.nn.DataParallel(model).cuda()
 
     if opt.resume:
         if os.path.isfile(opt.resume):
             print("=> loading checkpoint '{}'".format(opt.resume))
             checkpoint = torch.load(opt.resume)
-            model.load_state_dict(checkpoint['state_dict'], strict=False)
+            model.load_state_dict(checkpoint['state_dict'], strict=True)
 
         else:
             print("=> no checkpoint found at '{}'".format(opt.resume))
