@@ -1,0 +1,2 @@
+wget https://www.csie.ntu.edu.tw/~r07922076/cv-final-model/sceneflow_epoch_10.pth -O ./sceneflow_epoch_10.pth
+wget https://www.csie.ntu.edu.tw/~r07922076/cv-final-model/colorization_release_v2.caffemodel -O ./colorization_extract/models/colorization_release_v2.caffemodel
