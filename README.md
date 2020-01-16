@@ -11,6 +11,12 @@ We are formulating traditional geometric and optimization of stereo into deep ne
 
 [Slides](http://www.feihuzhang.com/GANet/GANet.pptx), [Video](https://www.youtube.com/watch?v=tpyrxcGL_Zg&feature=youtu.be), [Poster](http://www.feihuzhang.com/GANet/GANet_poster.pdf)
 
+## Env Install by Conda
+```
+conda create -n test -c defaults python=3.6 caffe-gpu
+conda install pytorch torchvision=0.4.0 cudatoolkit=10.0 -c pytorch
+```
+We also provide conda environment.yml for setting up the environment.
 
 ## Building Requirements:
 
