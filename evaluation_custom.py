@@ -42,7 +42,7 @@ def build_env():
         if os.path.isfile(opt.resume):
             print("=> loading checkpoint '{}'".format(opt.resume))
             checkpoint = torch.load(opt.resume)
-            model.load_state_dict(checkpoint['state_dict'], strict=True)
+            model.load_state_dict(checkpoint['state_dict'], strict=False)
 
         else:
             print("=> no checkpoint found at '{}'".format(opt.resume))

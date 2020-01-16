@@ -24,14 +24,14 @@ def computeDisp(Il, Ir):
         Ir = Ir[:,:,::-1]
         # This is rgb image
         # Apply GANet
-        disp = evaluate(Il, Ir).astype(np.int32)
+        disp = evaluate(Il, Ir)
     else:
         # This is gray scale image(input 3 channel R==G==B)
         # Apply colorization
         Il = gray2color(Il)
         Ir = gray2color(Ir)
         # Apply GANet
-        disp = evaluate(Il, Ir).astype(np.int32)
+        disp = evaluate(Il, Ir)
 
     return disp.astype(np.float32)
 
