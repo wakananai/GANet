@@ -30,8 +30,25 @@ def computeDisp(Il, Ir):
         # Apply colorization
         Il = gray2color(Il)
         Ir = gray2color(Ir)
+
+        # add padding to avoid negtive disparity
+        h,w,c = Il.shape
+
+        Il_pad = np.zeros((h,w+30,3), np.uint8)
+        Ir_pad = np.zeros((h,w+30,3), np.uint8)
+
+        Il_pad[:, 30:, :] = Il
+        Ir_pad[:, :-30, :] = Ir
+
         # Apply GANet
-        disp = evaluate(Il, Ir)
+        # disp = evaluate(Il, Ir)
+        disp = evaluate(Il_pad, Ir_pad)
+        disp = disp[:,30:]
+        value_95th = np.percentile(disp,95)
+        value_5th = np.percentile(disp,5)
+        disp = np.clip(disp, value_5th, value_95th)
+
+
 
     return disp.astype(np.float32)
 
