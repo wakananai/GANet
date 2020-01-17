@@ -47,7 +47,7 @@ def computeDisp(Il, Ir):
         value_95th = np.percentile(disp,95)
         value_5th = np.percentile(disp,5)
         disp = np.clip(disp, value_5th, value_95th)
-
+        disp -= disp.min()
 
 
     return disp.astype(np.float32)
