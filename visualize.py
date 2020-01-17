@@ -7,6 +7,12 @@ import cv2
 # the ground truth disparity maps may contain inf pixels as invalid pixels
 disp = readPFM(str(sys.argv[1]))
 
+percent_crop = False
+if percent_crop == True:
+    value_85th = np.percentile(disp,85)
+    value_5th = np.percentile(disp,5)
+    disp = np.clip(disp, value_5th, value_85th)
+
 # normalize disparity to 0.0~1.0 for visualization
 max_disp = np.nanmax(disp[disp != np.inf])
 min_disp = np.nanmin(disp[disp != np.inf])
@@ -15,5 +21,8 @@ disp_normalized = (disp - min_disp) / (max_disp - min_disp)
 # Jet color mapping
 disp_normalized = (disp_normalized * 255.0).astype(np.uint8)
 disp_normalized = cv2.applyColorMap(disp_normalized, cv2.COLORMAP_JET)
-cv2.imshow("visualized disparity", disp_normalized)
-cv2.waitKey(0)
+
+
+cv2.imwrite(str(sys.argv[2]), disp_normalized)
+# cv2.imshow("visualized disparity", disp_normalized)
+# cv2.waitKey(0)
